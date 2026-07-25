@@ -22,25 +22,27 @@ git fetch upstream && git log --oneline HEAD..upstream/main -- charts/kubernetes
 
 ## What actually needs tracking
 
-Neither real dependency flows through `netbirdio/helms`:
+Neither dependency flows through `netbirdio/helms`:
 
-| Source                                                                                                                                                                                                                           | What it changes here                                                                                       | How to notice                                                                                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`netbirdio/netbird`](https://github.com/netbirdio/netbird) releases                                                                                                                                                             | `appVersion`, `server.image.tag`, `dashboard.image.tag`, sometimes new `config.yaml` keys or ingress paths | watch releases; the tag forms differ (`0.75.0` for the server, `v2.90.7` for the dashboard)            |
-| [`combined/config.yaml.example`](https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example) and [`getting-started.sh`](https://github.com/netbirdio/netbird/blob/main/infrastructure_files/getting-started.sh) | `server.config` defaults, the dashboard env in `_helpers.tpl`, the Ingress route list                      | diff them against the chart when bumping `appVersion`; they are the reference the chart is modelled on |
-| [`netbirdio/kubernetes-operator`](https://github.com/netbirdio/kubernetes-operator)                                                                                                                                              | `charts/kubernetes-operator/`, by bot                                                                      | the sync workflow opens a PR, see below                                                                |
+| Source | What it changes here | How to notice |
+| --- | --- | --- |
+| [`netbirdio/netbird`](https://github.com/netbirdio/netbird) releases | `appVersion`, `server.image.tag`, `dashboard.image.tag`, sometimes new `config.yaml` keys or ingress paths | watch releases; the tag forms differ (`0.75.0` for the server, `v2.90.7` for the dashboard) |
+| [`combined/config.yaml.example`](https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example) and [`getting-started.sh`](https://github.com/netbirdio/netbird/blob/main/infrastructure_files/getting-started.sh) | `server.config` defaults, the dashboard env in `_helpers.tpl`, the Ingress route list | diff them against the chart when bumping `appVersion`; they are the reference the chart is modelled on |
 
 Bump ritual for a NetBird release: read the release notes and the two upstream files above, update the image tags and `appVersion`, adjust `server.config` and the route list if they moved, bump `version` in `Chart.yaml`, update `README.md` and `UPGRADING.md` if anything is breaking, then `helm lint` and render every example.
 
 ## Releasing
 
-`.github/workflows/helm.yml` runs [chart-releaser](https://github.com/helm/chart-releaser-action) on a push to `main` that touches `charts/netbird/Chart.yaml` or `charts/kubernetes-operator/Chart.yaml`. It packages the chart, creates a GitHub release named `helm-<chart>-v<version>`, and pushes `index.yaml` to `gh-pages`, which GitHub Pages serves at `https://hyperfocus1337.github.io/helms`.
+`.github/workflows/helm.yml` runs [chart-releaser](https://github.com/helm/chart-releaser-action) on a push to `main` that touches `charts/netbird/Chart.yaml`, or on `workflow_dispatch`. It packages the chart, creates a GitHub release named `helm-netbird-v<version>`, and pushes `index.yaml` to `gh-pages`, which GitHub Pages serves at `https://hyperfocus1337.github.io/helms`.
 
-Three consequences worth remembering:
+Four consequences worth remembering:
 
 - **Any template change needs a `Chart.yaml` version bump.** chart-releaser skips versions it has already released, so editing a published version in place changes nothing for consumers: they keep pulling the old package.
-- **A commit that changes only templates publishes nothing at all**, since the workflow's path filter is `Chart.yaml`. Bump the version in the same commit.
-- **Pages has to be enabled once**, on the `gh-pages` branch, after the first successful run creates it. Until then `helm repo add` against the Pages URL 404s.
+- **A commit that changes only templates publishes nothing at all**, since the workflow's path filter is `Chart.yaml`. Bump the version in the same commit, or run the workflow by hand.
+- **`gh-pages` has to exist first.** chart-releaser pushes `index.yaml` to that branch and does not create it: `git switch --orphan gh-pages && git commit --allow-empty -m "init" && git push -u origin gh-pages`.
+- **Pages has to be enabled once**, in Settings, pointed at `gh-pages`. Until then `helm repo add` against the Pages URL 404s.
+
+Actions is disabled by default in a fork, so none of this runs until it is enabled once on the repo's Actions tab.
 
 There are no tags in this repo yet, so `helm-netbird-v2.0.0` will be the first release, and upstream's 1.x was never published from here.
 
@@ -55,15 +57,9 @@ Consumers pin a chart version, not a branch, so an unreleased `main` never reach
 
 ## The operator charts
 
-`charts/kubernetes-operator` and `charts/netbird-operator-config` are inherited and unused by this fork's consumer. The sync workflow that maintains the first one runs every 6 hours and needs a `CHART_SYNC_TOKEN` secret plus branch protection for its auto-merge. **Fork secrets are not inherited**, so unless that PAT was created here, the workflow will fail at the checkout step the first time the operator publishes a version that differs from the mirrored one. It has not fired yet only because the mirror currently matches upstream.
+Deleted. `charts/kubernetes-operator`, `charts/netbird-operator-config`, their sync and test workflows and the root `examples/` values that came with them are gone: nothing consumed them here, and this repo has no business publishing an operator chart nobody audits. The sync workflow was also a liability, since it runs every 6 hours and needs a `CHART_SYNC_TOKEN` secret that **a fork does not inherit**, so it would have failed on cron from the moment Actions was enabled.
 
-Pick one, deliberately:
-
-- **Set `CHART_SYNC_TOKEN`** and keep mirroring, if you want this repo to serve the operator chart too.
-- **Drop the `schedule:` trigger** and keep `workflow_dispatch`, if the mirror is nice-to-have. It goes stale silently, which is honest for something unused.
-- **Delete both charts, the sync workflow and `test-chart-kubernetes-operator.yaml`**, if this fork exists only to publish `netbird`. Smallest surface, and it stops this repo from publishing an operator chart under a name nobody audits. Note that upstream publishes their own, so nothing is lost.
-
-Whichever it is, `charts/netbird` is unaffected: the sync is path-scoped (`rsync --delete` into `charts/kubernetes-operator/`, `git add -A charts/kubernetes-operator/`), so the bot cannot touch our chart.
+Nothing is lost. Upstream publishes the operator chart themselves, from [`netbirdio/kubernetes-operator`](https://github.com/netbirdio/kubernetes-operator), which is where the sync pulled it from anyway.
 
 ## Consumer
 
