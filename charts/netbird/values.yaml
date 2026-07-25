@@ -302,20 +302,25 @@ server:
   # limits:
   #   memory: 1Gi
 
-  ## @param server.livenessProbe Liveness probe for the server, hitting /health on the health port.
+  ## @param server.livenessProbe Liveness probe for the server.
   ## @param server.readinessProbe Readiness probe for the server.
   ##
+  ## Deliberately a socket check, not GET /health on the health port. That endpoint is an
+  ## end-to-end check: it opens a WebSocket to the server's own `exposedAddress` and returns 503
+  ## until that round trip works, so it depends on public DNS, the ingress and TLS. Wiring it to
+  ## readiness deadlocks the deployment, because the Service only routes to ready pods, so the
+  ## ingress has no backend to answer the check with and the pod can never become ready. Keep
+  ## /health for external monitoring, where "can a peer actually reach the relay" is the question.
+  ##
   livenessProbe:
-    httpGet:
-      path: /health
-      port: health
+    tcpSocket:
+      port: http
     initialDelaySeconds: 30
     periodSeconds: 30
   readinessProbe:
-    httpGet:
-      path: /health
-      port: health
-    initialDelaySeconds: 10
+    tcpSocket:
+      port: http
+    initialDelaySeconds: 5
     periodSeconds: 10
 
   ## @param server.nodeSelector Node selector for the server pod.

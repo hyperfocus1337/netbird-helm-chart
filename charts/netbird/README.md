@@ -68,6 +68,8 @@ Everything under `server.config` is written into `config.yaml` verbatim under `s
 
 See [values.yaml](./values.yaml) for the full list; every parameter is annotated.
 
+The probes are socket checks on the HTTP port, not `GET /health`. The server's health endpoint dials its own `exposedAddress` over WebSocket and answers 503 until that round trip works, so it needs public DNS, the ingress and TLS to be up. As a readiness probe it can never pass: the Service only routes to ready pods, so the ingress has nothing to answer the check with. Point external monitoring at `/health`, and leave the probes alone.
+
 `server.ports.*` are what the container ports, Services and probes use, so they have to match `config.listenAddress`, `config.stunPorts`, `config.metricsPort` and `config.healthcheckAddress`, which the defaults do. `config.dataDir` is where the volume is mounted, so it matters even when the config comes from `existingSecret`. The server binds `:80`, a privileged port: the default `server.securityContext` drops every capability and adds back only `NET_BIND_SERVICE`, without which the process exits with `listen tcp :80: bind: permission denied` even though it runs as root.
 
 ### Secrets
