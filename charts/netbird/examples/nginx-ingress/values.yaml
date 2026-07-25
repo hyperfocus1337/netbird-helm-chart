@@ -1,0 +1,36 @@
+# ingress-nginx with cert-manager.
+#
+# ingress-nginx reads the backend protocol from an annotation on the Ingress, and that annotation
+# applies to every path of that Ingress. GRPC for all of them would break the websocket routes
+# (/relay, /ws-proxy/), which cannot be proxied over HTTP/2. So the gRPC paths get their own Ingress
+# through ingress.grpcAnnotations, and the h2c Service is pointless here.
+domain: netbird.example.com
+
+server:
+  serviceH2c:
+    enabled: false
+  config:
+    authSecret: "" # openssl rand -base64 32
+    store:
+      encryptionKey: "" # openssl rand -base64 32
+    reverseProxy:
+      trustedHTTPProxies:
+        - "10.0.0.0/8" # pod CIDR of your cluster
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # The relay websocket stays open indefinitely, so do not time it out.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  # Only the gRPC paths. cert-manager stays on the Ingress above, so the certificate is requested
+  # once; this Ingress reuses the same secret.
+  grpcAnnotations:
+    nginx.ingress.kubernetes.io/backend-protocol: GRPC
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  tls:
+    enabled: true
+    secretName: netbird-tls

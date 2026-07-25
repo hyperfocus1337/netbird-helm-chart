@@ -1,0 +1,45 @@
+# k3s: built-in Traefik with an ACME certResolver, STUN bound on the node.
+#
+# Secrets are not in this file. Create the config Secret out of band, e.g.
+#   kubectl create secret generic netbird-config -n netbird --from-file=config.yaml=./config.yaml
+# and keep authSecret + store.encryptionKey inside that file. Drop server.config.create/
+# existingSecret if you would rather let the chart render config.yaml from values.
+domain: netbird.example.com
+
+server:
+  config:
+    create: false
+    existingSecret: netbird-config
+    # Only used by the chart when it renders the file itself, but keep them in sync with your
+    # config.yaml so the Services and probes match.
+    listenAddress: ":80"
+    dataDir: /var/lib/netbird
+    # Traefik runs in-cluster, so client IPs arrive in X-Forwarded-For from the pod network.
+    reverseProxy:
+      trustedHTTPProxies:
+        - "10.42.0.0/16" # k3s pod CIDR
+  stun:
+    # Not a Service: k3s's ServiceLB masquerades (klipper-lb ends its nat chain with -j MASQUERADE,
+    # externalTrafficPolicy Local included), and STUN answers with the source address it sees, so
+    # peers would get the load balancer's address instead of their own.
+    hostPort: 3478
+    service:
+      enabled: false
+  persistence:
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+  tls:
+    enabled: true
+    # No secretName: the certResolver above obtains the certificate.
