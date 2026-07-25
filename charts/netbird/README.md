@@ -1,6 +1,6 @@
 # netbird
 
-![Version: 2.0.0](https://img.shields.io/badge/Version-2.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.75.0](https://img.shields.io/badge/AppVersion-0.75.0-informational?style=flat-square)
+![Version: 2.0.1](https://img.shields.io/badge/Version-2.0.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.75.0](https://img.shields.io/badge/AppVersion-0.75.0-informational?style=flat-square)
 
 Self-hosted [NetBird](https://netbird.io) control plane for Kubernetes. Fork of [netbirdio/helms](https://github.com/netbirdio/helms), rewritten for the combined server.
 
