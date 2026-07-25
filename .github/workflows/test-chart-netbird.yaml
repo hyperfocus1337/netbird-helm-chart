@@ -31,15 +31,37 @@ jobs:
       - name: Verify Helm installation
         run: helm version
 
-      - name: Lint Helm Chart
+      - name: Lint Helm chart
         run: |
-          helm lint ./charts/kubernetes-operator
+          helm lint ./charts/netbird --set domain=netbird.example.com
+
+      - name: Render every example
+        run: |
+          for f in ./charts/netbird/examples/*/values.yaml; do
+            echo "== $f"
+            helm template netbird ./charts/netbird -f "$f" >/dev/null
+          done
 
       - name: Install Helm chart for project
+        # kind has no default LoadBalancer, so expose STUN as a NodePort instead.
         run: |
-          helm install test-chart --create-namespace --namespace netbird --set 'operator.image.tag=debug' ./charts/netbird
+          helm install test-chart ./charts/netbird \
+            --create-namespace --namespace netbird \
+            --wait --timeout 5m \
+            --set domain=netbird.example.com \
+            --set server.config.authSecret=test-relay-secret \
+            --set server.config.store.encryptionKey=dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE= \
+            --set server.stun.service.type=NodePort \
+            --set ingress.enabled=true
 
       - name: Check Helm release status
         run: |
           helm status test-chart --namespace netbird
- 
+          kubectl -n netbird get pods,svc,ingress
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          kubectl -n netbird describe pods
+          kubectl -n netbird logs -l app.kubernetes.io/component=server --tail=200 || true
+          kubectl -n netbird logs -l app.kubernetes.io/component=dashboard --tail=50 || true
