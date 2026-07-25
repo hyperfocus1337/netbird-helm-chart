@@ -1,0 +1,32 @@
+{{- if and .Values.server.stun.enabled .Values.server.stun.service.enabled }}
+{{- /*
+STUN is UDP and needs the client's real source address, so it never goes through the ingress.
+externalTrafficPolicy: Local keeps the source IP intact.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-stun
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.server.labels" . | nindent 4 }}
+  {{- with .Values.server.stun.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.stun.service.type }}
+  {{- with .Values.server.stun.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  selector:
+    {{- include "netbird.server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: stun
+      port: {{ .Values.server.stun.service.port }}
+      targetPort: stun
+      protocol: UDP
+      {{- with .Values.server.stun.service.nodePort }}
+      nodePort: {{ . }}
+      {{- end }}
+{{- end }}

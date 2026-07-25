@@ -1,0 +1,51 @@
+NetBird {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }}.
+
+Server:    {{ include "netbird.fullname" . }}-server ({{ .Values.server.image.repository }}:{{ .Values.server.image.tag | default .Chart.AppVersion }})
+           management + signal + relay + STUN + embedded IdP
+{{- if .Values.dashboard.enabled }}
+Dashboard: {{ include "netbird.fullname" . }}-dashboard ({{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }})
+{{- end }}
+
+1. Point DNS at your ingress and make sure these are reachable:
+     TCP 443            {{ include "netbird.domain" . }}
+{{- if .Values.server.stun.enabled }}
+{{- if .Values.server.stun.hostPort }}
+     UDP {{ .Values.server.stun.hostPort }}           STUN, bound on the node itself, never proxied
+{{- else if .Values.server.stun.service.enabled }}
+     UDP {{ .Values.server.stun.service.port }}           STUN, through Service {{ include "netbird.fullname" . }}-stun, never proxied
+
+   Check that your load balancer does not masquerade: STUN replies with the source address it
+   sees, so a masquerading one (k3s ServiceLB, for instance) hands peers a useless address.
+   Set server.stun.hostPort instead if it does.
+{{- else }}
+     UDP           STUN is running in the pod but is not exposed: set server.stun.hostPort or
+                   server.stun.service.enabled
+{{- end }}
+{{- end }}
+
+{{ if not .Values.ingress.enabled }}2. ingress.enabled is false, so nothing is exposed yet. Either enable it or route these
+   paths yourself: the three gRPC prefixes over h2c, then /api, /oauth2, /relay and
+   /ws-proxy/, then everything else to the dashboard.
+   https://docs.netbird.io/selfhosted/external-reverse-proxy
+
+{{ end }}{{ $owner := (default dict (default dict .Values.server.config.auth).owner).email }}{{ if $owner }}2. The owner account {{ $owner }} is created on first start.
+{{- else }}2. Open https://{{ include "netbird.domain" . }} and complete the /setup wizard to create the
+   owner account. That page stops working once an account exists.
+{{- end }}
+
+3. Join a peer:
+     netbird up --management-url https://{{ include "netbird.domain" . }}
+
+{{- if and .Values.server.config.create (not .Values.server.config.existingSecret) }}
+
+The rendered config.yaml lives in Secret {{ include "netbird.fullname" . }}-server-config.
+{{- if not .Values.server.config.store.encryptionKey }}
+
+WARNING: server.config.store.encryptionKey is empty. Set it to `openssl rand -base64 32` and back
+it up: local user data is encrypted with it and cannot be recovered if it is lost or changed.
+{{- end }}
+{{- if not .Values.server.config.authSecret }}
+
+WARNING: server.config.authSecret is empty. The embedded relay refuses to start without it.
+{{- end }}
+{{- end }}

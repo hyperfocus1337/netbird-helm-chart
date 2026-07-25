@@ -1,905 +1,509 @@
-## @section NetBird Parameters
-
-## @param global.namespace Kubernetes namespace for the NetBird components.
+## @section Global
 ##
 global:
+  ## @param global.namespace Override the namespace the chart's objects are created in.
+  ##
   namespace: ""
 
-## @param nameOverride Override the name of the chart.
+## @param nameOverride Override the chart name used in object names and labels.
 ##
 nameOverride: ""
 
-## @param fullnameOverride Override the full name of the chart.
+## @param fullnameOverride Override the fully qualified object name prefix.
 ##
 fullnameOverride: ""
 
-## @section NetBird Management
+## @param domain Public hostname the whole deployment is served on, e.g. netbird.example.com.
+## Required. Everything that needs the hostname (config, dashboard, ingress) defaults to it.
+##
+domain: ""
 
-management:
-  ## @param management.enabled Enable or disable NetBird management component.
-  ##
-  enabled: true
-
-  ## @param management.podCommand Define the arguments for the management pod.
-  ##
-  podCommand:
-    args:
-      - --port=80
-      - --log-file=console
-      - --log-level=info
-      - --disable-anonymous-metrics=false
-      - --single-account-mode-domain=netbird.selfhosted
-      - --dns-domain=netbird.selfhosted
-
-  configmap: |- # Placeholder for ConfigMap data
-
-  lifecycle: {} # Define lifecycle hooks (preStop, postStart) if needed.
-
-  ## @param management.replicaCount Number of management pod replicas.
-  ##
-  replicaCount: 1
-
-  ## @param management.env Environment variables for the management pod.
-  ##
-  env: {}
-
-  ## @param management.envRaw Raw environment variables for the management pod.
-  ##
-  envRaw: []
-  #- name: NETBIRD_STORE_ENGINE_POSTGRES_DSN
-  #  valueFrom:
-  #    secretKeyRef:
-  #      name: netbird-management
-  #      key: postgresDSN
-
-  ## @param management.envFromSecret Environment variables from secrets.
-  ##
-  envFromSecret: {}
-  #ENV_VAR: secretName/secretKey
-
+## @section NetBird server
+## One container running management, signal, relay, STUN and the embedded IdP.
+##
+server:
   image:
-    ## @param management.image.repository Docker image repository for the management component.
+    ## @param server.image.repository Server image repository.
     ##
-    repository: netbirdio/management
-
-    ## @param management.image.pullPolicy Docker image pull policy.
+    repository: netbirdio/netbird-server
+    ## @param server.image.tag Server image tag. Defaults to the chart's appVersion.
+    ##
+    tag: ""
+    ## @param server.image.pullPolicy Server image pull policy.
     ##
     pullPolicy: IfNotPresent
 
-    ## @param management.image.tag Docker image tag. Overrides the default tag.
-    ##
-    tag: ""
-
-  ## @param management.imagePullSecrets Docker registry credentials for pulling the management image.
+  ## @param server.imagePullSecrets Image pull secrets for the server image.
   ##
   imagePullSecrets: []
 
-  serviceAccount:
-    ## @param management.serviceAccount.create Whether to create a service account.
+  ## @param server.replicaCount Server replicas. Keep at 1 unless you run an external store, signal
+  ## and relay: the sqlite store and the embedded relay do not support multiple replicas.
+  ##
+  replicaCount: 1
+
+  ## Ports used by the Kubernetes objects (container ports, Services, probes). They have to match
+  ## config.listenAddress / config.stunPorts / config.metricsPort / config.healthcheckAddress, which
+  ## is what these defaults do.
+  ports:
+    ## @param server.ports.http Port serving the API, the IdP, gRPC and the relay websocket.
+    ##
+    http: 80
+    ## @param server.ports.stun UDP port of the embedded STUN server.
+    ##
+    stun: 3478
+    ## @param server.ports.metrics Prometheus metrics port.
+    ##
+    metrics: 9090
+    ## @param server.ports.health Healthcheck port, serving GET /health.
+    ##
+    health: 9000
+
+  ## The server's config.yaml. Keys are passed through verbatim under `server:`, so anything
+  ## upstream documents is settable here even when this chart does not name it:
+  ## https://docs.netbird.io/selfhosted/maintenance/configuration-files
+  ##
+  ## The chart fills in the domain-derived values (exposedAddress, auth.issuer,
+  ## auth.dashboardRedirectURIs) when they are left empty.
+  ##
+  ## The rendered file lands in a Secret, not a ConfigMap: it holds authSecret,
+  ## store.encryptionKey and any DSN passwords. The server reads the file as plain YAML with no
+  ## environment substitution, so those secrets have to sit inside it. To keep them out of your
+  ## values, render the file yourself and point config.existingSecret at it.
+  config:
+    ## @param server.config.create Render config.yaml from the keys below into a Secret.
     ##
     create: true
-
-    ## @param management.serviceAccount.annotations Annotations for the service account.
+    ## @param server.config.existingSecret Name of a Secret holding a ready-made config.yaml. Set
+    ## this together with config.create=false to keep secrets out of your values.
     ##
-    annotations: {}
-
-    ## @param management.serviceAccount.name Name of the service account to use.
+    existingSecret: ""
+    ## @param server.config.existingSecretKey Key inside that Secret.
     ##
-    name: ""
+    existingSecretKey: config.yaml
 
-  ## @param management.deploymentAnnotations Annotations for the management deployment.
-  ##
-  deploymentAnnotations: {}
-
-  ## @param management.podAnnotations Annotations for the management pod(s).
-  ##
-  podAnnotations: {}
-
-  ## @param management.podSecurityContext Security context for the management pod(s).
-  ##
-  podSecurityContext: {}
-  # fsGroup: 2000
-
-  ## @param management.securityContext Security context for the management container.
-  ##
-  securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-  ## @param management.useBackwardsGrpcService Use the backwards-compatible GRPC service.
-  useBackwardsGrpcService: false
-
-  metrics:
-    ## @param signal.metrics.enabled enables/disables metrics
+    ## @param server.config.listenAddress Address the HTTP/gRPC server binds to.
     ##
-    enabled: false
-    ## @param signal.metrics.port target metrics port
+    listenAddress: ":80"
+    ## @param server.config.exposedAddress Public URL handed to peers. Defaults to https://{domain}:443.
     ##
-    port: 9090
+    exposedAddress: ""
+    ## @param server.config.stunPorts UDP ports of the embedded STUN server.
+    ##
+    stunPorts:
+      - 3478
+    ## @param server.config.metricsPort Prometheus metrics port.
+    ##
+    metricsPort: 9090
+    ## @param server.config.healthcheckAddress Healthcheck listen address.
+    ##
+    healthcheckAddress: ":9000"
+    ## @param server.config.logLevel Log level: panic, fatal, error, warn, info, debug, trace.
+    ##
+    logLevel: info
+    ## @param server.config.logFile "console" or a path inside the container.
+    ##
+    logFile: console
+    ## @param server.config.dataDir Data directory; the persistent volume is mounted here.
+    ##
+    dataDir: /var/lib/netbird
+    ## @param server.config.authSecret Shared secret for relay authentication. Required unless an
+    ## external relay is configured. Generate with `openssl rand -base64 32`.
+    ##
+    authSecret: ""
+    ## @param server.config.disableAnonymousMetrics Stop sending anonymous usage metrics upstream.
+    ##
+    disableAnonymousMetrics: false
 
-  ## @param management.containerPort Container port for the management service.
-  ##
-  containerPort: 80
+    auth:
+      ## @param server.config.auth.issuer OIDC issuer. Defaults to https://{domain}/oauth2, the
+      ## embedded IdP. Point it at an external provider to use that instead.
+      ##
+      issuer: ""
+      ## @param server.config.auth.localAuthDisabled Turn off the embedded IdP. Doing so invalidates
+      ## every local user account, so only set it with an external provider configured.
+      ##
+      localAuthDisabled: false
+      ## @param server.config.auth.signKeyRefreshEnabled Refresh the IdP signing keys automatically.
+      ##
+      signKeyRefreshEnabled: true
+      ## @param server.config.auth.dashboardRedirectURIs Allowed dashboard redirect URIs. Defaults to
+      ## https://{domain}/nb-auth and https://{domain}/nb-silent-auth.
+      ##
+      dashboardRedirectURIs: []
+      ## @param server.config.auth.cliRedirectURIs Allowed redirect URIs for `netbird up`.
+      ##
+      cliRedirectURIs:
+        - "http://localhost:53000/"
+      ## Optional initial owner account, created on first start. Left empty, the first visit to the
+      ## dashboard's /setup wizard claims ownership instead.
+      owner:
+        ## @param server.config.auth.owner.email Initial owner email.
+        ##
+        email: ""
+        ## @param server.config.auth.owner.password Initial owner password, at least 8 characters.
+        ##
+        password: ""
+
+    ## @param server.config.reverseProxy.trustedHTTPProxies CIDRs of the proxies in front of the
+    ## server, so client IPs come from X-Forwarded-For. For an in-cluster ingress controller that is
+    ## the pod CIDR, e.g. ["10.42.0.0/16"] on k3s.
+    ## @param server.config.reverseProxy.trustedPeers CIDRs of trusted peer networks.
+    ##
+    reverseProxy:
+      trustedHTTPProxies: []
+      trustedPeers: []
+
+    store:
+      ## @param server.config.store.engine Management store: sqlite, postgres or mysql.
+      ##
+      engine: sqlite
+      ## @param server.config.store.dsn Connection string for postgres/mysql.
+      ##
+      dsn: ""
+      ## @param server.config.store.encryptionKey Encrypts sensitive rows, local users included.
+      ## Generate with `openssl rand -base64 32` and back it up: losing it makes that data
+      ## unrecoverable.
+      ##
+      encryptionKey: ""
+
+    ## @param server.config.extra Extra keys merged into the `server:` block verbatim. Use it for
+    ## anything this chart does not name: activityStore, authStore, stuns, relays, signalUri, tls,
+    ## mfaSession* and so on.
+    ## e.g:
+    ## extra:
+    ##   signalUri: "https://signal.example.com:443"
+    ##   relays:
+    ##     addresses: ["rels://relay.example.com:443"]
+    ##     secret: "shared-secret"
+    ##
+    extra: {}
 
   service:
-    ## @param management.service.type Service type for the management component.
+    ## @param server.service.type Service type for the HTTP/gRPC service.
     ##
     type: ClusterIP
-
-    ## @param management.service.port Port for the management service.
+    ## @param server.service.port Port of the HTTP/gRPC service.
     ##
     port: 80
-
-    ## @param management.service.name Name for the management service port.
-    ##
-    name: http
-
-    ## @param management.service.externalIPs External IPs for the management service.
-    ##
-    externalIPs: []
-
-    ## @param management.service.annotations Annotations for the management service.
+    ## @param server.service.annotations Annotations for the HTTP/gRPC service.
     ##
     annotations: {}
 
-  ## @param management.grpcContainerPort Container port for the management service.
-  ##
-  grpcContainerPort: 33073
-
-  serviceGrpc:
-    ## @param management.serviceGrpc.type Service type for the management GRPC component.
-    ##
-    type: ClusterIP
-
-    ## @param management.serviceGrpc.port Port for the management GRPC service.
-    ##
-    port: 33073
-
-    ## @param management.serviceGrpc.name Name for the management GRPC service port.
-    ##
-    name: grpc
-
-    ## @param management.serviceGrpc.externalIPs External IPs for the management GRPC service.
-    ##
-    externalIPs: []
-
-    ## @param management.serviceGrpc.annotations Annotations for the management service.
-    ##
-    annotations: {}
-
-  ingress:
-    ## @param management.ingress.enabled Enable or disable ingress for the management component.
-    ##
-    enabled: false
-
-    ## @param management.ingress.className Ingress class name.
-    ##
-    className: ""
-
-    ## @param management.ingress.annotations Annotations for the ingress resource.
-    ##
-    annotations: {}
-
-    hosts:
-      ## @param management.ingress.hosts[0].host Host for the ingress.
-      ##
-      - host: example.com
-        paths:
-          ## @param management.ingress.hosts[0].paths[0].path Path for the ingress.
-          ##
-          - path: /
-            ## @param management.ingress.hosts[0].paths[0].pathType Path type for the ingress.
-            ##
-            pathType: ImplementationSpecific
-
-    ## @param management.ingress.tls TLS settings for the ingress.
-    ##
-    tls: []
-    #  - secretName: chart-example-tls
-    #    hosts:
-    #      - chart-example.local
-
-  ingressGrpc:
-    ## @param management.ingressGrpc.enabled Enable or disable GRPC ingress.
-    ##
-    enabled: false
-
-    ## @param management.ingressGrpc.className Ingress class name for GRPC.
-    ##
-    className: ""
-
-    ## @param management.ingressGrpc.annotations Annotations for the GRPC ingress resource.
-    ##
-    annotations: {}
-
-    hosts:
-      ## @param management.ingressGrpc.hosts[0].host Host for GRPC ingress.
-      ##
-      - host: example.com
-        paths:
-          ## @param management.ingressGrpc.hosts[0].paths[0].path Path for GRPC ingress.
-          ##
-          - path: /
-            ## @param management.ingressGrpc.hosts[0].paths[0].pathType Path type for GRPC ingress.
-            ##
-            pathType: ImplementationSpecific
-
-    ## @param management.ingressGrpc.tls TLS settings for GRPC ingress.
-    ##
-    tls: []
-
-  ## @param management.resources Resource requests and limits for the management pod.
-  ##
-  resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-  ## @param management.nodeSelector Node selector for scheduling the management pod.
-  ##
-  nodeSelector: {}
-
-  ## @param management.tolerations Tolerations for scheduling the management pod.
-  ##
-  tolerations: []
-
-  ## @param management.affinity Affinity rules for scheduling the management pod.
-  ##
-  affinity: {}
-
-  persistentVolume:
-    ## @param management.persistentVolume.enabled Enable or disable persistent volume for the management pod.
+  ## Second Service over the same pods, for the gRPC routes only: gRPC needs HTTP/2 to the backend,
+  ## and websockets (the relay) do not survive an h2c backend.
+  serviceH2c:
+    ## @param server.serviceH2c.enabled Create the h2c Service.
     ##
     enabled: true
+    ## @param server.serviceH2c.annotations Annotations telling the ingress controller to speak h2c.
+    ## Traefik uses the default below; ingress-nginx wants
+    ## `nginx.ingress.kubernetes.io/backend-protocol: GRPC` on the Ingress instead.
+    ##
+    annotations:
+      traefik.ingress.kubernetes.io/service.serversscheme: h2c
 
-    ## @param management.persistentVolume.accessModes Access modes for the persistent volume.
+  ## The embedded STUN server cannot go through the ingress: it is UDP, and it answers with the
+  ## source address it sees, so that address has to be the peer's real one.
+  stun:
+    ## @param server.stun.enabled Run the embedded STUN server and open its container port.
+    ##
+    enabled: true
+    ## @param server.stun.hostPort Bind the STUN port directly on the node, e.g. 3478. Use this
+    ## instead of a Service on any load balancer that masquerades: k3s's ServiceLB does, including
+    ## with externalTrafficPolicy Local, in which case STUN hands every peer the load balancer's own
+    ## address and is useless. hostPort keeps the peer's address intact, which is also what the
+    ## upstream compose deployment gets from publishing the port on the host.
+    ##
+    hostPort: null
+    ## @param server.stun.service.enabled Create a Service for the STUN port.
+    ## @param server.stun.service.type LoadBalancer or NodePort.
+    ## @param server.stun.service.port UDP port to expose.
+    ## @param server.stun.service.nodePort Fixed node port, when type is NodePort.
+    ## @param server.stun.service.externalTrafficPolicy Local avoids a second hop and keeps source
+    ## addresses, but only on load balancers that preserve them in the first place.
+    ## @param server.stun.service.annotations Annotations for the STUN service.
+    ##
+    service:
+      enabled: true
+      type: LoadBalancer
+      port: 3478
+      nodePort: null
+      externalTrafficPolicy: Local
+      annotations: {}
+
+  persistence:
+    ## @param server.persistence.enabled Persist the data directory. Off means losing every peer,
+    ## user and key on restart.
+    ##
+    enabled: true
+    ## @param server.persistence.existingClaim Use an existing PVC instead of creating one.
+    ##
+    existingClaim: ""
+    ## @param server.persistence.accessModes Access modes for the created PVC.
     ##
     accessModes:
       - ReadWriteOnce
-
-    ## @param management.persistentVolume.size Size of the persistent volume.
+    ## @param server.persistence.size Size of the created PVC. Holds store.db, events.db, idp.db and
+    ## the GeoLite databases.
     ##
-    size: 10Mi
-
-    ## @param management.persistentVolume.storageClass Storage Class of the persistent volume.
+    size: 2Gi
+    ## @param server.persistence.storageClass StorageClass for the created PVC. Empty uses the
+    ## cluster default.
     ##
-    storageClass: null
-
-    ## @param management.persistentVolume.existingPVName The name of an existing persistent volume which should be claimed and used for the management pod.
-    ##
-    existingPVName: ""
-
-  ## @param management.livenessProbe for the management component.
-  ##
-  livenessProbe:
-    failureThreshold: 3
-    initialDelaySeconds: 15
-    periodSeconds: 10
-    timeoutSeconds: 3
-    tcpSocket:
-      port: http
-
-  ## @param management.readinessProbe for the management component.
-  ##
-  readinessProbe:
-    failureThreshold: 3
-    initialDelaySeconds: 15
-    periodSeconds: 10
-    timeoutSeconds: 3
-    tcpSocket:
-      port: http
-
-  ## @param management.volumeMounts Volume mounts for the management pod.
-  volumeMounts: []
-  # - name: tmp
-  #   mountPath: /tmp
-
-  ## @param management.volumes volumes for the management pod.
-  volumes: []
-  # - name: tmp
-  #   emptyDir: {}
-
-## @section NetBird Signal
-
-signal:
-  enabled: true
-  ## @param signal.logLevel Log level for the signal component.
-  ##
-  logLevel: info
-
-  ## @param signal.replicaCount Number of signal pod replicas.
-  ##
-  replicaCount: 1
-
-  image:
-    ## @param signal.image.repository Docker image repository for the signal component.
-    ##
-    repository: netbirdio/signal
-
-    ## @param signal.image.pullPolicy Docker image pull policy for the signal component.
-    ##
-    pullPolicy: IfNotPresent
-
-    ## @param signal.image.tag Docker image tag for the signal component.
-    ##
-    tag: ""
-
-  ## @param signal.imagePullSecrets Docker registry credentials for pulling the signal image.
-  ##
-  imagePullSecrets: []
+    storageClass: ""
 
   serviceAccount:
-    ## @param signal.serviceAccount.create Whether to create a service account for the signal component.
+    ## @param server.serviceAccount.create Create a ServiceAccount for the server.
     ##
     create: true
-
-    ## @param signal.serviceAccount.annotations Annotations for the signal service account.
-    ##
-    annotations: {}
-
-    ## @param signal.serviceAccount.name Name of the signal service account.
+    ## @param server.serviceAccount.name Name of the ServiceAccount to create or use.
     ##
     name: ""
-
-  ## @param signal.deploymentAnnotations Annotations for the signal deployment.
-  ##
-  deploymentAnnotations: {}
-
-  ## @param signal.podAnnotations Annotations for the signal pod(s).
-  ##
-  podAnnotations: {}
-
-  ## @param signal.podSecurityContext Security context for the signal pod(s).
-  ##
-  podSecurityContext: {}
-  # fsGroup: 2000
-
-  ## @param signal.securityContext Security context for the signal container.
-  ##
-  securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-  metrics:
-    ## @param signal.metrics.enabled enables/disables metrics
-    ##
-    enabled: false
-
-    ## @param signal.metrics.port target metrics port
-    ##
-    port: 9090
-
-  ## @param signal.containerPort Container port for the signal service.
-  ##
-  containerPort: 80
-
-  service:
-    ## @param signal.service.type Service type for the signal component.
-    ##
-    type: ClusterIP
-
-    ## @param signal.service.port Port for the signal service.
-    ##
-    port: 80
-
-    ## @param signal.service.name Name for the signal service port.
-    ##
-    name: grpc
-
-    ## @param signal.service.externalIPs External IPs for the signal service.
-    ##
-    externalIPs: []
-
-    ## @param signal.service.annotations Annotations for the signal service.
+    ## @param server.serviceAccount.annotations Annotations for the ServiceAccount.
     ##
     annotations: {}
 
-  ingress:
-    ## @param signal.ingress.enabled Enable or disable ingress for the signal component.
-    ##
-    enabled: false
-
-    ## @param signal.ingress.className Ingress class name for the signal component.
-    ##
-    className: ""
-
-    ## @param signal.ingress.annotations Annotations for the signal ingress resource.
-    ##
-    annotations: {}
-
-    hosts:
-      ## @param signal.ingress.hosts[0].host Host for the signal ingress.
-      ##
-      - host: example.com
-        paths:
-          ## @param signal.ingress.hosts[0].paths[0].path Path for the signal ingress.
-          ##
-          - path: /signalexchange.SignalExchange
-            ## @param signal.ingress.hosts[0].paths[0].pathType Path type for the signal ingress.
-            ##
-            pathType: ImplementationSpecific
-
-    ## @param signal.ingress.tls TLS settings for the signal ingress.
-    ##
-    tls: []
-
-  ## @
-
-  ## param signal.resources Resource requests and limits for the signal pod.
-  resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-  ## @param signal.nodeSelector Node selector for scheduling the signal pod.
-  ##
-  nodeSelector: {}
-
-  ## @param signal.tolerations Tolerations for scheduling the signal pod.
-  ##
-  tolerations: []
-
-  ## @param signal.affinity Affinity rules for scheduling the signal pod.
-  ##
-  affinity: {}
-
-  ## @param signal.livenessProbe for the signal component.
-  ##
-
-  livenessProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    tcpSocket:
-      port: grpc
-
-  ## @param signal.readinessProbe for the signal component.
-  ##
-  readinessProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    tcpSocket:
-      port: grpc
-
-  ## @param signal.volumeMounts Volume mounts for the signal pod.
-  volumeMounts: []
-  # - name: tmp
-  #   mountPath: /tmp
-
-  ## @param signal.volumes volumes for the signal pod.
-  volumes: []
-  # - name: tmp
-  #   emptyDir: {}
-
-## @section NetBird Relay Parameters
-
-relay:
-  ## @param relay.enabled Enable or disable the NetBird relay component.
-  ##
-  enabled: true
-
-  ## @param relay.replicaCount Number of relay pod replicas.
-  ##
-  replicaCount: 1
-
-  ## @param relay.logLevel Log level for the relay component.
-  ##
-  logLevel: info
-
-  ## @param relay.env Environment variables for the management pod.
+  ## @param server.env Extra environment variables for the server container, as a map. Runtime
+  ## overrides use the NB_ prefix, e.g. NB_LOG_LEVEL.
   ##
   env: {}
 
-  ## @param relay.envRaw Raw environment variables for the management pod.
+  ## @param server.envRaw Extra environment variables in raw Kubernetes form, for valueFrom.
   ##
   envRaw: []
 
-  ## @param relay.envFromSecret Environment variables from secrets.
-  ##
-  envFromSecret: {}
-  #ENV_VAR: secretName/secretKey
-
-  image:
-    ## @param relay.image.repository Docker image repository for the relay component.
-    ##
-    repository: netbirdio/relay
-
-    ## @param relay.image.pullPolicy Docker image pull policy for the relay component.
-    ##
-    pullPolicy: IfNotPresent
-
-    ## @param relay.image.tag Docker image tag for the relay component.
-    ##
-    tag: ""
-
-  ## @param relay.imagePullSecrets Docker registry credentials for pulling the relay image.
-  ##
-  imagePullSecrets: []
-
-  serviceAccount:
-    ## @param relay.serviceAccount.create Whether to create a service account for the relay component.
-    ##
-    create: true
-
-    ## @param relay.serviceAccount.annotations Annotations for the relay service account.
-    ##
-    annotations: {}
-
-    ## @param relay.serviceAccount.name Name of the relay service account.
-    ##
-    name: ""
-
-  ## @param relay.deploymentAnnotations Annotations for the relay deployment.
-  ##
-  deploymentAnnotations: {}
-
-  ## @param relay.podAnnotations Annotations for the relay pod(s).
+  ## @param server.podAnnotations Annotations for the server pod.
+  ## @param server.podLabels Extra labels for the server pod.
+  ## @param server.podSecurityContext Pod security context for the server.
+  ## @param server.securityContext Container security context for the server.
   ##
   podAnnotations: {}
-
-  ## @param relay.podSecurityContext Security context for the relay pod(s).
-  ##
+  podLabels: {}
   podSecurityContext: {}
-  # fsGroup: 2000
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+      ## NET_BIND_SERVICE is what lets the server bind config.listenAddress (:80 by default).
+      ## Docker grants it implicitly, Kubernetes does not: with capabilities dropped and nothing
+      ## added, the process fails with "listen tcp :80: bind: permission denied", even as root.
+      ## Drop this if you move listenAddress and ports.http above 1024.
+      add:
+        - NET_BIND_SERVICE
 
-  ## @param relay.securityContext Security context for the relay container.
-  ##
-  securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-  metrics:
-    ## @param signal.metrics.enabled enables/disables metrics
-    ##
-    enabled: false
-    ## @param signal.metrics.port target metrics port
-    ##
-    port: 9090
-
-  ## @param relay.containerPort Container port for the relay service.
-  ##
-  containerPort: 33080
-
-  service:
-    ## @param relay.service.type Service type for the relay component.
-    ##
-    type: ClusterIP
-
-    ## @param relay.service.port Port for the relay service.
-    ##
-    port: 33080
-
-    ## @param relay.service.name Name for the relay service port.
-    ##
-    name: http
-
-    ## @param relay.service.externalIPs External IPs for the relay service.
-    ##
-    externalIPs: []
-
-    ## @param relay.service.annotations Annotations for the relay service.
-    ##
-    annotations: {}
-
-  ingress:
-    ## @param relay.ingress.enabled Enable or disable ingress for the relay component.
-    ##
-    enabled: false
-
-    ## @param relay.ingress.className Ingress class name for the relay component.
-    ##
-    className: ""
-
-    ## @param relay.ingress.annotations Annotations for the relay ingress resource.
-    ##
-    annotations: {}
-
-    hosts:
-      ## @param relay.ingress.hosts[0].host Host for the relay ingress.
-      ##
-      - host: example.com
-        paths:
-          ## @param relay.ingress.hosts[0].paths[0].path Path for the relay ingress.
-          ##
-          - path: /relay
-            ## @param relay.ingress.hosts[0].paths[0].pathType Path type for the relay ingress.
-            ##
-            pathType: ImplementationSpecific
-
-    ## @param relay.ingress.tls TLS settings for the relay ingress.
-    ##
-    tls: []
-
-  ## @param relay.resources Resource requests and limits for the relay pod.
+  ## @param server.resources Resource requests and limits for the server.
   ##
   resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
   # requests:
   #   cpu: 100m
-  #   memory: 128Mi
+  #   memory: 256Mi
+  # limits:
+  #   memory: 1Gi
 
-  ## @param relay.nodeSelector Node selector for scheduling the relay pod.
-  ##
-  nodeSelector: {}
-
-  ## @param relay.tolerations Tolerations for scheduling the relay pod.
-  ##
-  tolerations: []
-
-  ## @param relay.affinity Affinity rules for scheduling the relay pod.
-  ##
-  affinity: {}
-
-  ## @param relay.livenessProbe for the relay component.
+  ## @param server.livenessProbe Liveness probe for the server, hitting /health on the health port.
+  ## @param server.readinessProbe Readiness probe for the server.
   ##
   livenessProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    tcpSocket:
-      port: http
-
-  ## @param relay.readinessProbe for the relay component.
-  ##
+    httpGet:
+      path: /health
+      port: health
+    initialDelaySeconds: 30
+    periodSeconds: 30
   readinessProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    tcpSocket:
-      port: http
+    httpGet:
+      path: /health
+      port: health
+    initialDelaySeconds: 10
+    periodSeconds: 10
 
-  ## @param relay.volumeMounts Volume mounts for the relay pod.
-  volumeMounts: []
-  # - name: tmp
-  #   mountPath: /tmp
+  ## @param server.nodeSelector Node selector for the server pod.
+  ## @param server.tolerations Tolerations for the server pod.
+  ## @param server.affinity Affinity rules for the server pod.
+  ##
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
-  ## @param relay.volumes volumes for the relay pod.
+  ## @param server.volumes Extra volumes for the server pod.
+  ## @param server.volumeMounts Extra volume mounts for the server container.
+  ##
   volumes: []
-  # - name: tmp
-  #   emptyDir: {}
+  volumeMounts: []
 
+## @section Dashboard
+##
 dashboard:
-  ## @param dashboard.enabled Enable or disable the NetBird dashboard component.
+  ## @param dashboard.enabled Deploy the dashboard.
   ##
   enabled: true
 
-  ## @param management.podCommand Define the arguments for the management pod.
-  ##
-  podCommand:
-    args: []
-    #  - sed -i 's/listen \[\:\:\]\:80 default_server\;//g' /etc/nginx/http.d/default.conf && /usr/bin/supervisord -c /etc/supervisord.conf
-
-  ## @param replicaCount Number of replicas to deploy
-  replicaCount: 1
-
   image:
-    ## @param image.repository image repository
+    ## @param dashboard.image.repository Dashboard image repository.
+    ##
     repository: netbirdio/dashboard
-
-    ## @param image.pullPolicy image pull policy
+    ## @param dashboard.image.tag Dashboard image tag.
+    ##
+    tag: v2.90.7
+    ## @param dashboard.image.pullPolicy Dashboard image pull policy.
+    ##
     pullPolicy: IfNotPresent
 
-    ## @param image.tag image tag (immutable tags are recommended)
-    tag: "v2.13.1"
-
-  ## @param imagePullSecrets image pull secrets
+  ## @param dashboard.imagePullSecrets Image pull secrets for the dashboard image.
+  ##
   imagePullSecrets: []
 
-  serviceAccount:
-    ## @param dashboard.serviceAccount.create Specifies whether a service account should be
-    ## created
-    create: true
+  ## @param dashboard.replicaCount Dashboard replicas.
+  ##
+  replicaCount: 1
 
-    ## @param dashboard.serviceAccount.annotations Annotations to add to the service account
-    annotations: {}
+  ## @param dashboard.env Dashboard environment, merged over the chart's defaults. Those defaults
+  ## point the dashboard at https://{domain} and the embedded IdP at https://{domain}/oauth2.
+  ## Override AUTH_AUTHORITY, AUTH_CLIENT_ID, AUTH_AUDIENCE and AUTH_SUPPORTED_SCOPES when you use
+  ## an external identity provider.
+  ##
+  env: {}
 
-    ## @param serviceAccount.name The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname
-    # template
-    name: ""
-
-  ## @param dashboard.podAnnotations Annotations for pods
-  ## ref:
-  ## https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-  podAnnotations: {}
-
-  ## Configure Pods Security Context
-  ## ref:
-  ## https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
-  ## @param podSecurityContext
-  podSecurityContext: {}
-  # fsGroup: 2000
-
-  ## Configure Container Security Context
-  ## ref:
-  ## https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
-  ## @param dashboard.securityContext
-  securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
-
-  ## @param dashboard.containerPort
-  containerPort: 80
+  ## @param dashboard.envRaw Extra dashboard environment variables in raw Kubernetes form.
+  ##
+  envRaw: []
 
   service:
-    ## @param dashboard.service.type Service type for the dashboard component.
+    ## @param dashboard.service.type Service type for the dashboard.
     ##
     type: ClusterIP
-
-    ## @param dashboard.service.port Port for the dashboard service.
+    ## @param dashboard.service.port Port of the dashboard service.
     ##
     port: 80
-
-    ## @param dashboard.service.name Name for the dashboard service port.
-    ##
-    name: http
-
-    ## @param dashboard.service.externalIPs External IPs for the dashboard service.
-    ##
-    externalIPs: []
-    
     ## @param dashboard.service.annotations Annotations for the dashboard service.
     ##
     annotations: {}
 
-  ingress:
-    ## @param dashboard.ingress.enabled
-    enabled: false
-
-    ## @param dashboard.ingress.className
-    className: ""
-
-    ## @param dashboard.ingress.annotations
+  serviceAccount:
+    ## @param dashboard.serviceAccount.create Create a ServiceAccount for the dashboard.
+    ##
+    create: true
+    ## @param dashboard.serviceAccount.name Name of the ServiceAccount to create or use.
+    ##
+    name: ""
+    ## @param dashboard.serviceAccount.annotations Annotations for the ServiceAccount.
+    ##
     annotations: {}
-    # kubernetes.io/tls-acme: "true"
 
-    hosts:
-      ## @param dashboard.ingress.hosts[0].host
-      - host: chart-example.local
-        ## @param dashboard.ingress.hosts[0].host
-        paths:
-          ## @param dashboard.ingress.hosts[0].paths[0].path
-          - path: /
-            ## @param dashboard.ingress.hosts[0].paths[0].pathType
-            pathType: ImplementationSpecific
+  ## @param dashboard.podAnnotations Annotations for the dashboard pod.
+  ## @param dashboard.podLabels Extra labels for the dashboard pod.
+  ## @param dashboard.podSecurityContext Pod security context for the dashboard.
+  ## @param dashboard.securityContext Container security context for the dashboard.
+  ##
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
 
-    ## @param dashboard.ingress.tls
-    tls: []
-    #  - secretName: chart-example-tls
-    #    hosts:
-    #      - chart-example.local
-
-  ## @param dashboard.resources
+  ## @param dashboard.resources Resource requests and limits for the dashboard.
+  ##
   resources: {}
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
 
-  ## @param dashboard.nodeSelector
-  nodeSelector: {}
-
-  ## @param dashboard.tolerations
-  tolerations: []
-
-  ## @param dashboard.affinity
-  affinity: {}
-
-  ## @param dashboard.env
-  ##
-  env: {}
-
-  ## @param dashboard.envRaw
-  ##
-  envRaw: []
-
-  ## @param dashboard.envFromSecret
-  ##
-  envFromSecret: {}
-  #ENV_VAR: secretName/secretKey
-
-  lifecycle: {} # Define lifecycle hooks (preStop, postStart) if needed.
-
-  ## @param dashboard.livenessProbe for the dashboard component.
+  ## @param dashboard.livenessProbe Liveness probe for the dashboard.
+  ## @param dashboard.readinessProbe Readiness probe for the dashboard.
   ##
   livenessProbe:
-    periodSeconds: 5
     httpGet:
       path: /
       port: http
-
-  ## @param dashboard.readinessProbe for the dashboard component.
-  ##
+    initialDelaySeconds: 15
+    periodSeconds: 30
   readinessProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
     httpGet:
       path: /
       port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
 
-  ## @param dashboard.volumeMounts Volume mounts for the dashboard pod.
-  volumeMounts: []
-  # - name: tmp
-  #   mountPath: /tmp
-
-  ## @param dashboard.volumes volumes for the dashboard pod.
-  volumes: []
-  # - name: tmp
-  #   emptyDir: {}
-## @section NetBird Extra Manifests to be included in the chart
-
-extraManifests: {}
-# - apiVersion: v1
-#   kind: ServiceAccount
-#   .....
-
-## @section Prometheus metrics
-
-metrics:
-  ## Prometheus Operator ServiceMonitor configuration
+  ## @param dashboard.nodeSelector Node selector for the dashboard pod.
+  ## @param dashboard.tolerations Tolerations for the dashboard pod.
+  ## @param dashboard.affinity Affinity rules for the dashboard pod.
   ##
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+## @section Ingress
+## One Ingress covering every route NetBird needs. The path list is fixed by NetBird's own routing
+## (https://docs.netbird.io/selfhosted/external-reverse-proxy): the three gRPC prefixes go to the
+## h2c Service, the API, IdP and websocket prefixes to the plain Service, everything else to the
+## dashboard.
+##
+ingress:
+  ## @param ingress.enabled Create the Ingress.
+  ##
+  enabled: false
+  ## @param ingress.className IngressClass to use.
+  ##
+  className: ""
+  ## @param ingress.host Host to serve on. Defaults to .Values.domain.
+  ##
+  host: ""
+  ## @param ingress.annotations Annotations for the Ingress.
+  ## e.g. for Traefik with an ACME resolver:
+  ## annotations:
+  ##   traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  ##   traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+  ##
+  annotations: {}
+  ## @param ingress.grpcAnnotations Annotations for a second Ingress carrying only the gRPC paths.
+  ## Empty keeps every route on one Ingress, which is what Traefik wants: it takes the backend scheme
+  ## from the h2c Service. Controllers that read the backend protocol off the Ingress instead, like
+  ## ingress-nginx, need the gRPC routes split off, since that annotation would otherwise apply to
+  ## the websocket routes as well and break them. Put only the protocol annotation here and leave
+  ## certificate-issuing annotations in ingress.annotations; the split Ingress does not inherit them.
+  ## e.g:
+  ## grpcAnnotations:
+  ##   nginx.ingress.kubernetes.io/backend-protocol: GRPC
+  ##
+  grpcAnnotations: {}
+  ## @param ingress.pathType pathType for the generated paths.
+  ##
+  pathType: Prefix
+  tls:
+    ## @param ingress.tls.enabled Add a tls block for the host.
+    ##
+    enabled: true
+    ## @param ingress.tls.secretName Certificate Secret. Leave empty when the controller obtains the
+    ## certificate itself, e.g. through a Traefik certResolver.
+    ##
+    secretName: ""
+  ## @param ingress.extraPaths Extra paths, inserted before the dashboard catch-all.
+  ##
+  extraPaths: []
+
+## @section Metrics
+##
+metrics:
   serviceMonitor:
-    ## @param metrics.serviceMonitor.enabled if `true`, creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)
+    ## @param metrics.serviceMonitor.enabled Create a Prometheus Operator ServiceMonitor scraping the
+    ## server's /metrics endpoint.
     ##
     enabled: false
-    ## @param metrics.serviceMonitor.namespace Namespace in which Prometheus is running
+    ## @param metrics.serviceMonitor.namespace Namespace to create the ServiceMonitor in.
+    ## @param metrics.serviceMonitor.labels Extra labels for the ServiceMonitor.
+    ## @param metrics.serviceMonitor.annotations Extra annotations for the ServiceMonitor.
+    ## @param metrics.serviceMonitor.interval Scrape interval.
+    ## @param metrics.serviceMonitor.scrapeTimeout Scrape timeout.
+    ## @param metrics.serviceMonitor.metricRelabelings Metric relabelings.
+    ## @param metrics.serviceMonitor.relabelings Relabelings.
     ##
     namespace: ""
-    ## @param metrics.serviceMonitor.annotations Additional custom annotations for the ServiceMonitor
-    ##
-    annotations: {}
-    ## @param metrics.serviceMonitor.labels Extra labels for the ServiceMonitor
-    ##
     labels: {}
-    ## @param metrics.serviceMonitor.jobLabel The name of the label on the target service to use as the job name in Prometheus
-    ##
-    jobLabel: ""
-    ## @param metrics.serviceMonitor.honorLabels honorLabels chooses the metric's labels on collisions with target labels
-    ##
-    honorLabels: false
-    ## @param metrics.serviceMonitor.interval Interval at which metrics should be scraped.
-    ## ref: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#endpoint
-    ## e.g:
-    ## interval: 10s
-    ##
+    annotations: {}
     interval: ""
-    ## @param metrics.serviceMonitor.scrapeTimeout Timeout after which the scrape is ended
-    ## ref: https://github.com/coreos/prometheus-operator/blob/master/Documentation/api.md#endpoint
-    ## e.g:
-    ## scrapeTimeout: 10s
-    ##
     scrapeTimeout: ""
-    ## @param metrics.serviceMonitor.metricRelabelings Specify additional relabeling of metrics
-    ##
     metricRelabelings: []
-    ## @param metrics.serviceMonitor.relabelings Specify general relabeling
-    ##
     relabelings: []
-    ## @param metrics.serviceMonitor.selector Prometheus instance selector labels
-    ## selector:
-    ##   prometheus: my-prometheus
-    ##
-    selector: {}
+
+## @section Extra manifests
+##
+## @param extraManifests Arbitrary objects created alongside the chart.
+##
+extraManifests: []

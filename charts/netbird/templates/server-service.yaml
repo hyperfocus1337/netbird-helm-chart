@@ -1,0 +1,28 @@
+{{- /*
+Plain HTTP/1.1 backend: /api, /oauth2 and the websocket routes (/relay, /ws-proxy/).
+gRPC uses the h2c Service instead, since websockets do not survive an h2c backend.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "netbird.fullname" . }}-server
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.server.labels" . | nindent 4 }}
+  {{- with .Values.server.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.server.service.type }}
+  selector:
+    {{- include "netbird.server.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.server.service.port }}
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.server.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP

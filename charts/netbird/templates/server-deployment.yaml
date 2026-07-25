@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "netbird.fullname" . }}-server
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.server.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  {{- if .Values.server.persistence.enabled }}
+  strategy:
+    type: Recreate  # the data directory is a single ReadWriteOnce volume
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "netbird.server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if and .Values.server.config.create (not .Values.server.config.existingSecret) }}
+        checksum/config: {{ include "netbird.server.config" . | sha256sum }}
+        {{- end }}
+        {{- with .Values.server.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "netbird.server.selectorLabels" . | nindent 8 }}
+        {{- with .Values.server.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.server.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "netbird.server.serviceAccountName" . }}
+      {{- with .Values.server.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # Management, signal, relay, STUN and the embedded IdP in one process.
+        - name: netbird-server
+          image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          args:
+            - --config
+            - /etc/netbird/{{ include "netbird.server.configSecretKey" . }}
+          {{- with .Values.server.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.server.env .Values.server.envRaw }}
+          env:
+            {{- range $key, $value := .Values.server.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- with .Values.server.envRaw }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.ports.http }}
+              protocol: TCP
+            {{- if .Values.server.stun.enabled }}
+            - name: stun
+              containerPort: {{ .Values.server.ports.stun }}
+              protocol: UDP
+              {{- with .Values.server.stun.hostPort }}
+              hostPort: {{ . }}  # the peer's source address has to survive, see values.yaml
+              {{- end }}
+            {{- end }}
+            - name: metrics
+              containerPort: {{ .Values.server.ports.metrics }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.server.ports.health }}
+              protocol: TCP
+          {{- with .Values.server.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.server.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.server.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/netbird
+              readOnly: true
+            - name: data
+              mountPath: {{ .Values.server.config.dataDir }}
+            {{- with .Values.server.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: config
+          secret:
+            secretName: {{ include "netbird.server.configSecretName" . }}
+        - name: data
+          {{- if .Values.server.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.server.persistence.existingClaim | default (printf "%s-server-data" (include "netbird.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.server.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

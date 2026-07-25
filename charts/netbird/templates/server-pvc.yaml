@@ -1,0 +1,22 @@
+{{- if and .Values.server.persistence.enabled (not .Values.server.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "netbird.fullname" . }}-server-data
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.server.labels" . | nindent 4 }}
+  annotations:
+    # Survive `helm uninstall`: this volume is the whole network (peers, users, keys).
+    # Delete it by hand when you actually mean to throw the deployment away.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.server.persistence.accessModes | nindent 4 }}
+  {{- with .Values.server.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.size | quote }}
+{{- end }}

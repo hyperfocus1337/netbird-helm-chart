@@ -1,0 +1,12 @@
+{{- if .Values.dashboard.enabled }}
+{{- /* Dashboard settings are public: they end up in the browser bundle. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "netbird.fullname" . }}-dashboard
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.dashboard.labels" . | nindent 4 }}
+data:
+  {{- include "netbird.dashboard.env" . | nindent 2 }}
+{{- end }}

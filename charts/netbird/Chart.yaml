@@ -1,8 +1,26 @@
 ---
 apiVersion: v2
 name: netbird
-description: NetBird VPN management platform
+description: NetBird self-hosted control plane (combined server with embedded IdP) and dashboard
 type: application
-version: 1.9.0
-appVersion: "0.46.0"
+version: 2.0.0
+appVersion: "0.75.0"
+home: https://netbird.io
+sources:
+  - https://github.com/netbirdio/netbird
+keywords:
+  - netbird
+  - vpn
+  - wireguard
+  - zero-trust
 icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
+annotations:
+  artifacthub.io/changes: |
+    - kind: changed
+      description: "Rewritten for NetBird's combined server (netbirdio/netbird-server): management, signal, relay and STUN in one Deployment."
+    - kind: added
+      description: "Embedded IdP (Dex), so no external identity provider is required."
+    - kind: added
+      description: "config.yaml rendered from values into a Secret, or supplied via server.config.existingSecret."
+    - kind: removed
+      description: "Separate management/signal/relay Deployments and management.json. See UPGRADING.md."

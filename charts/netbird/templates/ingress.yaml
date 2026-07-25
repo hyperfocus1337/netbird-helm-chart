@@ -1,0 +1,125 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullName := include "netbird.fullname" . -}}
+{{- $host := .Values.ingress.host | default (include "netbird.domain" .) -}}
+{{- $pathType := .Values.ingress.pathType -}}
+{{- $serverSvc := printf "%s-server" $fullName -}}
+{{- $grpcSvc := ternary (printf "%s-server-h2c" $fullName) $serverSvc .Values.server.serviceH2c.enabled -}}
+{{- $port := .Values.server.service.port -}}
+{{- $grpcPaths := list "/management.ManagementService/" "/management.ProxyService/" "/signalexchange.SignalExchange/" -}}
+{{- $splitGrpc := not (empty .Values.ingress.grpcAnnotations) -}}
+{{- /*
+Route list comes from NetBird's own reverse-proxy requirements:
+https://docs.netbird.io/selfhosted/external-reverse-proxy
+
+  gRPC (h2c)  /management.ManagementService/, /management.ProxyService/,
+              /signalexchange.SignalExchange/
+  HTTP + ws   /api, /oauth2, /relay, /ws-proxy/
+  dashboard   everything else
+
+Longest prefix wins in Traefik and ingress-nginx alike, so the dashboard catch-all stays last.
+STUN (UDP 3478) is not here: it cannot be proxied.
+
+With ingress.grpcAnnotations set, the gRPC paths move to a second Ingress carrying only those
+annotations, for controllers that take the backend protocol from the Ingress instead of the Service.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.common.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- if not $splitGrpc }}
+          {{- range $path := $grpcPaths }}
+          - path: {{ $path }}
+            pathType: {{ $pathType }}
+            backend:
+              service:
+                name: {{ $grpcSvc }}
+                port:
+                  number: {{ $port }}
+          {{- end }}
+          {{- end }}
+          {{- range $path := list "/api" "/oauth2" "/relay" "/ws-proxy/" }}
+          - path: {{ $path }}
+            pathType: {{ $pathType }}
+            backend:
+              service:
+                name: {{ $serverSvc }}
+                port:
+                  number: {{ $port }}
+          {{- end }}
+          {{- with .Values.ingress.extraPaths }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- if .Values.dashboard.enabled }}
+          - path: /
+            pathType: {{ $pathType }}
+            backend:
+              service:
+                name: {{ $fullName }}-dashboard
+                port:
+                  number: {{ .Values.dashboard.service.port }}
+          {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      {{- with .Values.ingress.tls.secretName }}
+      secretName: {{ . }}
+      {{- end }}
+  {{- end }}
+{{- if $splitGrpc }}
+---
+{{- /*
+gRPC only. Deliberately does not inherit ingress.annotations: certificate-issuing annotations
+belong on the Ingress above, so the same host is not requested twice.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-grpc
+  namespace: {{ include "netbird.namespace" . }}
+  labels:
+    {{- include "netbird.common.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.grpcAnnotations | nindent 4 }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- range $path := $grpcPaths }}
+          - path: {{ $path }}
+            pathType: {{ $pathType }}
+            backend:
+              service:
+                name: {{ $grpcSvc }}
+                port:
+                  number: {{ $port }}
+          {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      {{- with .Values.ingress.tls.secretName }}
+      secretName: {{ . }}
+      {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
