@@ -1,6 +1,6 @@
 # Maintaining this fork
 
-`hyperfocus1337/helms` is a fork of [`netbirdio/helms`](https://github.com/netbirdio/helms) in GitHub's sense only. `charts/netbird` here is a rewrite for NetBird's combined server (2.x), not a patched copy of upstream's 1.9.0 chart: same path, same chart name, no shared content. Treat that directory as owned code that happens to live in a fork, and the rest of the repo as an upstream mirror we do not edit.
+`hyperfocus1337/netbird-helm-chart` is a fork of [`netbirdio/helms`](https://github.com/netbirdio/helms) in GitHub's sense only. `charts/netbird` here is a rewrite for NetBird's combined server (2.x), not a patched copy of upstream's 1.9.0 chart: same path, same chart name, no shared content. Treat that directory as owned code that happens to live in a fork, and the rest of the repo as an upstream mirror we do not edit.
 
 ## Do not merge upstream
 
@@ -33,7 +33,7 @@ Bump ritual for a NetBird release: read the release notes and the two upstream f
 
 ## Releasing
 
-`.github/workflows/helm.yml` runs [chart-releaser](https://github.com/helm/chart-releaser-action) on a push to `main` that touches `charts/netbird/Chart.yaml`, or on `workflow_dispatch`. It packages the chart, creates a GitHub release named `helm-netbird-v<version>`, and pushes `index.yaml` to `gh-pages`, which GitHub Pages serves at `https://hyperfocus1337.github.io/helms`.
+`.github/workflows/helm.yml` runs [chart-releaser](https://github.com/helm/chart-releaser-action) on a push to `main` that touches `charts/netbird/Chart.yaml`, or on `workflow_dispatch`. It packages the chart, creates a GitHub release named `helm-netbird-v<version>`, and pushes `index.yaml` to `gh-pages`, which GitHub Pages serves at `https://hyperfocus1337.github.io/netbird-helm-chart`.
 
 Four consequences worth remembering:
 
@@ -50,7 +50,7 @@ There are no tags in this repo yet, so `helm-netbird-v2.0.0` will be the first r
 
 Commit to `main`. One maintainer, one consumer (the k3s node), and no upstream to keep a clean history for, so a branch-and-PR dance buys nothing. Two fork-specific footguns to know about:
 
-- `gh pr create` in a fork defaults its base to the **parent** repo. If you do open a PR, pass `--repo hyperfocus1337/helms`, or run `gh repo set-default hyperfocus1337/helms` once in the clone.
+- `gh pr create` in a fork defaults its base to the **parent** repo. If you do open a PR, pass `--repo hyperfocus1337/netbird-helm-chart`, or run `gh repo set-default hyperfocus1337/netbird-helm-chart` once in the clone.
 - Issues, stars and the fork banner all point at `netbirdio/helms`. If the divergence is permanent, ask GitHub Support to detach the fork; it costs nothing to leave attached, but detaching removes the wrong-base risk entirely.
 
 Consumers pin a chart version, not a branch, so an unreleased `main` never reaches a cluster by accident.

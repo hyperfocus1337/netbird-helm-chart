@@ -8,7 +8,7 @@ Chart 2.x deploys NetBird's **combined server**: one container running managemen
 
 Modelled on the upstream compose deployment that [`getting-started.sh`](https://github.com/netbirdio/netbird/blob/main/infrastructure_files/getting-started.sh) generates, so the ports, routes and config keys match what NetBird documents and supports.
 
-This chart is maintained independently of the repository it was forked from: see [MAINTAINING.md](https://github.com/hyperfocus1337/helms/blob/main/MAINTAINING.md) for how it tracks NetBird releases and why upstream is never merged.
+This chart is maintained independently of the repository it was forked from: see [MAINTAINING.md](https://github.com/hyperfocus1337/netbird-helm-chart/blob/main/MAINTAINING.md) for how it tracks NetBird releases and why upstream is never merged.
 
 ## What it deploys
 
@@ -35,7 +35,7 @@ This chart is maintained independently of the repository it was forked from: see
 ## Install
 
 ```sh
-helm repo add netbird https://hyperfocus1337.github.io/helms
+helm repo add netbird https://hyperfocus1337.github.io/netbird-helm-chart
 helm install netbird netbird/netbird \
   -n netbird --create-namespace \
   --set domain=netbird.example.com \
