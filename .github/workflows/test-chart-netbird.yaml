@@ -44,13 +44,19 @@ jobs:
 
       - name: Install Helm chart for project
         # kind has no default LoadBalancer, so expose STUN as a NodePort instead.
+        # store.encryptionKey has to base64-decode to an AES key of 16, 24 or 32 bytes,
+        # or the server exits before it ever serves /health. Generate it rather than
+        # hardcoding one that silently drifts out of spec.
+        # Geolite is downloaded at startup by default; skip it so the test does not
+        # depend on an external mirror.
         run: |
           helm install test-chart ./charts/netbird \
             --create-namespace --namespace netbird \
-            --wait --timeout 5m \
+            --wait --timeout 10m \
             --set domain=netbird.example.com \
             --set server.config.authSecret=test-relay-secret \
-            --set server.config.store.encryptionKey=dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE= \
+            --set-string server.config.store.encryptionKey="$(openssl rand -base64 32)" \
+            --set server.config.disableGeoliteUpdate=true \
             --set server.stun.service.type=NodePort \
             --set ingress.enabled=true
 
