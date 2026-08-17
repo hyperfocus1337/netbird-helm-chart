@@ -22,14 +22,17 @@ git fetch upstream && git log --oneline HEAD..upstream/main -- charts/kubernetes
 
 ## What actually needs tracking
 
-Neither dependency flows through `netbirdio/helms`:
+Neither dependency flows through `netbirdio/helms`. [Renovate](https://docs.renovatebot.com/) watches the two container images and opens PRs; `renovate.json` plus the `# renovate: image=netbirdio/netbird-server` comment on `appVersion` are what it reads.
 
-| Source | What it changes here | How to notice |
-| --- | --- | --- |
-| [`netbirdio/netbird`](https://github.com/netbirdio/netbird) releases | `appVersion`, `server.image.tag`, `dashboard.image.tag`, sometimes new `config.yaml` keys or ingress paths | watch releases; the tag forms differ (`0.75.0` for the server, `v2.90.7` for the dashboard) |
-| [`combined/config.yaml.example`](https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example) and [`getting-started.sh`](https://github.com/netbirdio/netbird/blob/main/infrastructure_files/getting-started.sh) | `server.config` defaults, the dashboard env in `_helpers.tpl`, the Ingress route list | diff them against the chart when bumping `appVersion`; they are the reference the chart is modelled on |
+| Source                                                                                                                                                                                                                           | What it changes here                                                                  | How to notice                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `netbirdio/netbird-server`                                                                                                                                                                                                       | `appVersion` (the server image tag is empty and follows this)                         | Renovate PR. Tags look like `0.75.0`.                                                                          |
+| `netbirdio/dashboard`                                                                                                                                                                                                            | `dashboard.image.tag`                                                                 | Renovate PR. Tags look like `v2.90.7`.                                                                         |
+| [`combined/config.yaml.example`](https://github.com/netbirdio/netbird/blob/main/combined/config.yaml.example) and [`getting-started.sh`](https://github.com/netbirdio/netbird/blob/main/infrastructure_files/getting-started.sh) | `server.config` defaults, the dashboard env in `_helpers.tpl`, the Ingress route list | diff them against the chart before merging an `appVersion` PR; they are the reference the chart is modelled on |
 
-Bump ritual for a NetBird release: read the release notes and the two upstream files above, update the image tags and `appVersion`, adjust `server.config` and the route list if they moved, bump `version` in `Chart.yaml`, update `README.md` and `UPGRADING.md` if anything is breaking, then `helm lint` and render every example.
+Renovate also bumps `Chart.yaml` `version` on those image PRs (patch for a patch tag, minor otherwise) so chart-releaser will publish. Do not automerge: a NetBird release can add `config.yaml` keys or ingress paths that Renovate cannot see.
+
+Before merging an image PR: read the [NetBird release notes](https://github.com/netbirdio/netbird/releases), diff the two upstream files above, adjust `server.config` and the route list if they moved, and update `README.md` and `UPGRADING.md` if anything is breaking. CI already lints, renders every example, and installs into kind.
 
 ## Releasing
 
@@ -48,7 +51,7 @@ There are no tags in this repo yet, so `helm-netbird-v2.0.0` will be the first r
 
 ## Branching
 
-Commit to `main`. One maintainer, one consumer (the k3s node), and no upstream to keep a clean history for, so a branch-and-PR dance buys nothing. Two fork-specific footguns to know about:
+Commit to `main`. One maintainer, one consumer (the k3s node), and no upstream to keep a clean history for, so a branch-and-PR dance buys nothing except for Renovate, whose image PRs need the bump ritual above before merge. Two fork-specific footguns to know about:
 
 - `gh pr create` in a fork defaults its base to the **parent** repo. If you do open a PR, pass `--repo hyperfocus1337/netbird-helm-chart`, or run `gh repo set-default hyperfocus1337/netbird-helm-chart` once in the clone.
 - Issues, stars and the fork banner all point at `netbirdio/helms`. If the divergence is permanent, ask GitHub Support to detach the fork; it costs nothing to leave attached, but detaching removes the wrong-base risk entirely.

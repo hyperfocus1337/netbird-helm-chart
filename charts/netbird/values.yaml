@@ -27,6 +27,7 @@ server:
     ##
     repository: netbirdio/netbird-server
     ## @param server.image.tag Server image tag. Defaults to the chart's appVersion.
+    ## Leave empty so the server follows appVersion, which Renovate updates from this image.
     ##
     tag: ""
     ## @param server.image.pullPolicy Server image pull policy.
