@@ -5,7 +5,7 @@ description: NetBird self-hosted control plane (combined server with embedded Id
 type: application
 version: 2.1.0
 # renovate: image=netbirdio/netbird-server
-appVersion: "0.75.0"
+appVersion: "0.77.1"
 home: https://netbird.io
 sources:
   - https://github.com/netbirdio/netbird
