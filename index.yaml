@@ -3,6 +3,30 @@ entries:
   netbird:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: "NetBird server 0.77.1. Chart 2.1.0 was released before this bump landed and still ships 0.75.0."
+    apiVersion: v2
+    appVersion: 0.77.1
+    created: "2026-08-22T18:56:01.871876621Z"
+    description: NetBird self-hosted control plane (combined server with embedded
+      IdP) and dashboard
+    digest: 0850600d7fb249f57d9ae536203987d7d28da14c2e2fe3b2ca708761effd32f1
+    home: https://netbird.io
+    icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
+    keywords:
+    - netbird
+    - vpn
+    - wireguard
+    - zero-trust
+    name: netbird
+    sources:
+    - https://github.com/netbirdio/netbird
+    type: application
+    urls:
+    - https://github.com/hyperfocus1337/netbird-helm-chart/releases/download/helm-netbird-v2.2.0/netbird-2.2.0.tgz
+    version: 2.2.0
+  - annotations:
+      artifacthub.io/changes: |
         - kind: fixed
           description: "Chart repository URL in the README, after the repository was renamed to netbird-helm-chart."
     apiVersion: v2
@@ -79,4 +103,4 @@ entries:
     urls:
     - https://github.com/hyperfocus1337/helms/releases/download/helm-netbird-v2.0.0/netbird-2.0.0.tgz
     version: 2.0.0
-generated: "2026-08-22T14:40:49.411945213Z"
+generated: "2026-08-22T18:56:01.871891183Z"
