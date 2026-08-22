@@ -3,7 +3,7 @@ apiVersion: v2
 name: netbird
 description: NetBird self-hosted control plane (combined server with embedded IdP) and dashboard
 type: application
-version: 2.1.0
+version: 2.2.0
 # renovate: image=netbirdio/netbird-server
 appVersion: "0.77.1"
 home: https://netbird.io
@@ -17,5 +17,5 @@ keywords:
 icon: https://images.crunchbase.com/image/upload/c_pad,h_256,w_256,f_auto,q_auto:eco,dpr_1/kuu5tm1wt09ztp6ctlag
 annotations:
   artifacthub.io/changes: |
-    - kind: fixed
-      description: "Chart repository URL in the README, after the repository was renamed to netbird-helm-chart."
+    - kind: changed
+      description: "NetBird server 0.77.1. Chart 2.1.0 was released before this bump landed and still ships 0.75.0."
