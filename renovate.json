@@ -3,8 +3,9 @@
   "extends": ["config:recommended", "customManagers:helmChartYamlAppVersions"],
   "packageRules": [
     {
-      "description": "Bump Chart.yaml version when an image in this chart changes, so chart-releaser publishes",
+      "description": "Bump Chart.yaml version when an image in this chart changes, so chart-releaser publishes. One PR for every image: separate PRs each bump to the same version, and whichever merges second collides with the release tag the first one cut.",
       "matchFileNames": ["charts/**"],
+      "groupName": "netbird chart images",
       "bumpVersions": [
         {
           "filePatterns": ["{{packageFileDir}}/Chart.yaml"],
