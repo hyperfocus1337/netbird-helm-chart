@@ -3,9 +3,9 @@ apiVersion: v2
 name: netbird
 description: NetBird self-hosted control plane (combined server with embedded IdP) and dashboard
 type: application
-version: 2.2.0
+version: 2.3.0
 # renovate: image=netbirdio/netbird-server
-appVersion: "0.77.1"
+appVersion: "0.78.1"
 home: https://netbird.io
 sources:
   - https://github.com/netbirdio/netbird
